@@ -14,38 +14,21 @@ DIGITAL_INPUT Promo_Choose_Knight;
 DIGITAL_INPUT Promo_Cancel;
 
 // Scalar digital outputs
-DIGITAL_OUTPUT White_To_Move_Fb;
-DIGITAL_OUTPUT Black_To_Move_Fb;
-DIGITAL_OUTPUT White_In_Check_Fb;
-DIGITAL_OUTPUT Black_In_Check_Fb;
-DIGITAL_OUTPUT Checkmate_Fb;
-DIGITAL_OUTPUT Stalemate_Fb;
-DIGITAL_OUTPUT Draw_Fb;
 DIGITAL_OUTPUT Game_Over_Fb;
-DIGITAL_OUTPUT Move_Rejected_Fb;
 DIGITAL_OUTPUT Promotion_Prompt_Fb;
-DIGITAL_OUTPUT Cpu_Thinking_Fb;
 
 // Scalar serial outputs
-STRING_OUTPUT Board_FEN$;
 STRING_OUTPUT Last_Move$;
 STRING_OUTPUT Status_Text$;
 STRING_OUTPUT Captured_By_White$;
 STRING_OUTPUT Captured_By_Black$;
-STRING_OUTPUT Reject_Reason$;
-
-// Scalar analog inputs
-//ANALOG_INPUT Cpu_Delay_Tenths;
-
-// Scalar analog outputs
-ANALOG_OUTPUT Fullmove_Number;
 
 // Array joins (after all scalars)
 DIGITAL_INPUT Square_Press[64];
 DIGITAL_OUTPUT Square_Selected_Fb[64];
-STRING_OUTPUT Square_Text$[64];
 STRING_OUTPUT Square_Icon_Path$[64];
-STRING_INPUT Cpu_Delay_Text$[10];
+STRING_OUTPUT Captured_White_Icon$[15];
+STRING_OUTPUT Captured_Black_Icon$[15];
 
 Chess game;
 
@@ -58,6 +41,7 @@ INTEGER bCpuEnabled;
 INTEGER bCpuIsWhite;
 INTEGER nGameGeneration;
 INTEGER nPendingMoveGeneration;
+INTEGER bWhiteToMove;
 
 STRING_FUNCTION IndexToAlgebraic(INTEGER idx)
 {
@@ -69,12 +53,6 @@ STRING_FUNCTION IndexToAlgebraic(INTEGER idx)
     col = (idx - 1) MOD 8;
     result = MID(sFiles, col + 1, 1) + ITOA(8 - row);
     RETURN (result);
-}
-
-STRING_FUNCTION PieceCodeToLabel(STRING code)
-{
-    IF (code = ".") RETURN ("");
-    RETURN (code);
 }
 
 STRING_FUNCTION PieceCodeToIconPath(STRING code)
@@ -93,8 +71,6 @@ STRING_FUNCTION PieceCodeToIconPath(STRING code)
     IF (code = "k") RETURN ("https://raw.githubusercontent.com/JJ0609/CrestronChess/ddb1ae91433b0497b33732fed2264e159f4a2d73/bK.png");
     RETURN ("https://raw.githubusercontent.com/JJ0609/CrestronChess/ddb1ae91433b0497b33732fed2264e159f4a2d73/blank.png");
 }
-
-
 
 INTEGER_FUNCTION IsPromotionMove(INTEGER fromIdx, INTEGER toIdx, STRING boardSquares)
 {
@@ -117,30 +93,21 @@ FUNCTION RefreshUI()
     INTEGER isLegal;
     STRING boardSquares[65];
     STRING codeChar[2];
+    STRING capturedWhite[16];
+    STRING capturedBlack[16];
+    INTEGER lenWhite, lenBlack;
+    INTEGER j;
+    STRING capturedChar[2];
 
     boardSquares = game.GetBoardSquares();
-    Board_FEN$ = game.GetFEN();
     Last_Move$ = game.GetLastMove();
     Status_Text$ = game.GetStatusText();
-    Captured_By_White$ = game.GetCapturedByWhite();
-    Captured_By_Black$ = game.GetCapturedByBlack();
-    White_To_Move_Fb = game.GetWhiteToMove();
-    IF (game.GetWhiteToMove() = 1)
-        Black_To_Move_Fb = 0;
-    ELSE
-        Black_To_Move_Fb = 1;
-    White_In_Check_Fb = game.GetWhiteInCheck();
-    Black_In_Check_Fb = game.GetBlackInCheck();
-    Checkmate_Fb = game.GetCheckmate();
-    Stalemate_Fb = game.GetStalemate();
-    Draw_Fb = game.GetDraw();
+    bWhiteToMove = game.GetWhiteToMove();
     Game_Over_Fb = game.GetGameOver();
-    Fullmove_Number = game.GetFullmoveNumber();
 
     FOR (i = 1 TO 64)
     {
         codeChar = MID(boardSquares, i, 1);
-        Square_Text$[i] = PieceCodeToLabel(codeChar);
         Square_Icon_Path$[i] = PieceCodeToIconPath(codeChar);
 
         IF (nSelectedSquare = i)
@@ -157,6 +124,36 @@ FUNCTION RefreshUI()
             Square_Selected_Fb[i] = isLegal;
         }
     }
+
+    capturedWhite = game.GetCapturedByWhite();
+    capturedBlack = game.GetCapturedByBlack();
+    Captured_By_White$ = capturedWhite;
+    Captured_By_Black$ = capturedBlack;
+    lenWhite = LEN(capturedWhite);
+    lenBlack = LEN(capturedBlack);
+
+    FOR (j = 1 TO 15)
+    {
+        IF (j <= lenWhite)
+        {
+            capturedChar = MID(capturedWhite, j, 1);
+            Captured_White_Icon$[j] = PieceCodeToIconPath(capturedChar);
+        }
+        ELSE
+        {
+            Captured_White_Icon$[j] = PieceCodeToIconPath(".");
+        }
+
+        IF (j <= lenBlack)
+        {
+            capturedChar = MID(capturedBlack, j, 1);
+            Captured_Black_Icon$[j] = PieceCodeToIconPath(capturedChar);
+        }
+        ELSE
+        {
+            Captured_Black_Icon$[j] = PieceCodeToIconPath(".");
+        }
+    }
 }
 
 FUNCTION MaybeCpuMove()
@@ -167,23 +164,19 @@ FUNCTION MaybeCpuMove()
     {
         IF (Game_Over_Fb = 0)
         {
-            //delayTime = ATOI(Cpu_Delay_Text$);
-            //IF (delayTime <= 0)
-                delayTime = 300; // default 1.5 seconds
+            delayTime = 300; // fixed 1.5 second delay
 
             nPendingMoveGeneration = nGameGeneration;
 
             IF (bCpuIsWhite = 1)
             {
-                IF (White_To_Move_Fb = 1)
+                IF (bWhiteToMove = 1)
                 {
-                    Cpu_Thinking_Fb = 1;
                     WAIT (delayTime)
                     {
                         IF (nPendingMoveGeneration = nGameGeneration)
                         {
                             game.MakeCpuMove();
-                            Cpu_Thinking_Fb = 0;
                             RefreshUI();
                         }
                     }
@@ -191,15 +184,13 @@ FUNCTION MaybeCpuMove()
             }
             ELSE
             {
-                IF (Black_To_Move_Fb = 1)
+                IF (bWhiteToMove = 0)
                 {
-                    Cpu_Thinking_Fb = 1;
                     WAIT (delayTime)
                     {
                         IF (nPendingMoveGeneration = nGameGeneration)
                         {
                             game.MakeCpuMove();
-                            Cpu_Thinking_Fb = 0;
                             RefreshUI();
                         }
                     }
@@ -212,7 +203,6 @@ FUNCTION MaybeCpuMove()
 FUNCTION StartGame(INTEGER cpuEnabled, INTEGER cpuIsWhite)
 {
     nGameGeneration = nGameGeneration + 1;
-    Cpu_Thinking_Fb = 0;
     nSelectedSquare = 0;
     sLegalMaskGlobal = "";
     Promotion_Prompt_Fb = 0;
@@ -229,12 +219,7 @@ FUNCTION CompletePromotion()
     STRING toAlg[4];
     fromAlg = IndexToAlgebraic(nPendingFromIndex);
     toAlg = IndexToAlgebraic(nPendingToIndex);
-    IF (game.MakeMove(fromAlg, toAlg, sPendingPromoLetter) = 0)
-    {
-        Reject_Reason$ = game.GetRejectReason();
-        Move_Rejected_Fb = 1;
-        Move_Rejected_Fb = 0;
-    }
+    game.MakeMove(fromAlg, toAlg, sPendingPromoLetter);
     Promotion_Prompt_Fb = 0;
     nPendingFromIndex = 0;
     nPendingToIndex = 0;
@@ -279,12 +264,7 @@ FUNCTION HandleSquarePress(INTEGER idx)
         }
         ELSE
         {
-            IF (game.MakeMove(fromAlg, toAlg, "") = 0)
-            {
-                Reject_Reason$ = game.GetRejectReason();
-                Move_Rejected_Fb = 1;
-                Move_Rejected_Fb = 0;
-            }
+            game.MakeMove(fromAlg, toAlg, "");
         }
         nSelectedSquare = 0;
         sLegalMaskGlobal = "";
