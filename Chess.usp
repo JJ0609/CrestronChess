@@ -1,0 +1,323 @@
+#CATEGORY "31" // Digital Operations
+#USER_SIMPLSHARP_LIBRARY "ChessGames"
+
+// Scalar digital inputs
+DIGITAL_INPUT Start_Two_Player;
+DIGITAL_INPUT Start_One_Player_White;
+DIGITAL_INPUT Start_One_Player_Black;
+DIGITAL_INPUT Resign_White;
+DIGITAL_INPUT Resign_Black;
+DIGITAL_INPUT Promo_Choose_Queen;
+DIGITAL_INPUT Promo_Choose_Rook;
+DIGITAL_INPUT Promo_Choose_Bishop;
+DIGITAL_INPUT Promo_Choose_Knight;
+DIGITAL_INPUT Promo_Cancel;
+
+// Scalar digital outputs
+DIGITAL_OUTPUT White_To_Move_Fb;
+DIGITAL_OUTPUT Black_To_Move_Fb;
+DIGITAL_OUTPUT White_In_Check_Fb;
+DIGITAL_OUTPUT Black_In_Check_Fb;
+DIGITAL_OUTPUT Checkmate_Fb;
+DIGITAL_OUTPUT Stalemate_Fb;
+DIGITAL_OUTPUT Draw_Fb;
+DIGITAL_OUTPUT Game_Over_Fb;
+DIGITAL_OUTPUT Move_Rejected_Fb;
+DIGITAL_OUTPUT Promotion_Prompt_Fb;
+DIGITAL_OUTPUT Cpu_Thinking_Fb;
+
+// Scalar serial outputs
+STRING_OUTPUT Board_FEN$;
+STRING_OUTPUT Last_Move$;
+STRING_OUTPUT Status_Text$;
+STRING_OUTPUT Captured_By_White$;
+STRING_OUTPUT Captured_By_Black$;
+STRING_OUTPUT Reject_Reason$;
+
+// Scalar analog inputs
+//ANALOG_INPUT Cpu_Delay_Tenths;
+
+// Scalar analog outputs
+ANALOG_OUTPUT Fullmove_Number;
+
+// Array joins (after all scalars)
+DIGITAL_INPUT Square_Press[64];
+DIGITAL_OUTPUT Square_Selected_Fb[64];
+STRING_OUTPUT Square_Text$[64];
+STRING_OUTPUT Square_Icon_Path$[64];
+STRING_INPUT Cpu_Delay_Text$[10];
+
+Chess game;
+
+INTEGER nSelectedSquare;
+INTEGER nPendingFromIndex;
+INTEGER nPendingToIndex;
+STRING sPendingPromoLetter[2];
+STRING sLegalMaskGlobal[65];
+INTEGER bCpuEnabled;
+INTEGER bCpuIsWhite;
+INTEGER nGameGeneration;
+INTEGER nPendingMoveGeneration;
+
+STRING_FUNCTION IndexToAlgebraic(INTEGER idx)
+{
+    STRING sFiles[9];
+    INTEGER row, col;
+    STRING result[4];
+    sFiles = "abcdefgh";
+    row = (idx - 1) / 8;
+    col = (idx - 1) MOD 8;
+    result = MID(sFiles, col + 1, 1) + ITOA(8 - row);
+    RETURN (result);
+}
+
+STRING_FUNCTION PieceCodeToLabel(STRING code)
+{
+    IF (code = ".") RETURN ("");
+    RETURN (code);
+}
+
+STRING_FUNCTION PieceCodeToIconPath(STRING code)
+{
+    IF (code = "P") RETURN ("http://10.96.10.150:8000/wP.png");
+    IF (code = "N") RETURN ("http://10.96.10.150:8000/wN.png");
+    IF (code = "B") RETURN ("http://10.96.10.150:8000/wB.png");
+    IF (code = "R") RETURN ("http://10.96.10.150:8000/wR.png");
+    IF (code = "Q") RETURN ("http://10.96.10.150:8000/wQ.png");
+    IF (code = "K") RETURN ("http://10.96.10.150:8000/wK.png");
+    IF (code = "p") RETURN ("http://10.96.10.150:8000/bP.png");
+    IF (code = "n") RETURN ("http://10.96.10.150:8000/bN.png");
+    IF (code = "b") RETURN ("http://10.96.10.150:8000/bB.png");
+    IF (code = "r") RETURN ("http://10.96.10.150:8000/bR.png");
+    IF (code = "q") RETURN ("http://10.96.10.150:8000/bQ.png");
+    IF (code = "k") RETURN ("http://10.96.10.150:8000/bK.png");
+    RETURN ("http://10.96.10.150:8000/blank.png");
+}
+
+
+INTEGER_FUNCTION IsPromotionMove(INTEGER fromIdx, INTEGER toIdx, STRING boardSquares)
+{
+    STRING pieceChar[2];
+    pieceChar = MID(boardSquares, fromIdx, 1);
+    IF (pieceChar = "P")
+    {
+        IF (toIdx <= 8) RETURN (1);
+    }
+    IF (pieceChar = "p")
+    {
+        IF (toIdx >= 57) RETURN (1);
+    }
+    RETURN (0);
+}
+
+FUNCTION RefreshUI()
+{
+    INTEGER i;
+    INTEGER isLegal;
+    STRING boardSquares[65];
+    STRING codeChar[2];
+
+    boardSquares = game.GetBoardSquares();
+    Board_FEN$ = game.GetFEN();
+    Last_Move$ = game.GetLastMove();
+    Status_Text$ = game.GetStatusText();
+    Captured_By_White$ = game.GetCapturedByWhite();
+    Captured_By_Black$ = game.GetCapturedByBlack();
+    White_To_Move_Fb = game.GetWhiteToMove();
+    IF (game.GetWhiteToMove() = 1)
+        Black_To_Move_Fb = 0;
+    ELSE
+        Black_To_Move_Fb = 1;
+    White_In_Check_Fb = game.GetWhiteInCheck();
+    Black_In_Check_Fb = game.GetBlackInCheck();
+    Checkmate_Fb = game.GetCheckmate();
+    Stalemate_Fb = game.GetStalemate();
+    Draw_Fb = game.GetDraw();
+    Game_Over_Fb = game.GetGameOver();
+    Fullmove_Number = game.GetFullmoveNumber();
+
+    FOR (i = 1 TO 64)
+    {
+        codeChar = MID(boardSquares, i, 1);
+        Square_Text$[i] = PieceCodeToLabel(codeChar);
+        Square_Icon_Path$[i] = PieceCodeToIconPath(codeChar);
+
+        IF (nSelectedSquare = i)
+        {
+            Square_Selected_Fb[i] = 1;
+        }
+        ELSE
+        {
+            isLegal = 0;
+            IF (nSelectedSquare > 0)
+            {
+                isLegal = (MID(sLegalMaskGlobal, i, 1) = "1");
+            }
+            Square_Selected_Fb[i] = isLegal;
+        }
+    }
+}
+
+FUNCTION MaybeCpuMove()
+{
+    INTEGER delayTime;
+
+    IF (bCpuEnabled = 1)
+    {
+        IF (Game_Over_Fb = 0)
+        {
+            //delayTime = ATOI(Cpu_Delay_Text$);
+            //IF (delayTime <= 0)
+                delayTime = 300; // default 1.5 seconds
+
+            nPendingMoveGeneration = nGameGeneration;
+
+            IF (bCpuIsWhite = 1)
+            {
+                IF (White_To_Move_Fb = 1)
+                {
+                    Cpu_Thinking_Fb = 1;
+                    WAIT (delayTime)
+                    {
+                        IF (nPendingMoveGeneration = nGameGeneration)
+                        {
+                            game.MakeCpuMove();
+                            Cpu_Thinking_Fb = 0;
+                            RefreshUI();
+                        }
+                    }
+                }
+            }
+            ELSE
+            {
+                IF (Black_To_Move_Fb = 1)
+                {
+                    Cpu_Thinking_Fb = 1;
+                    WAIT (delayTime)
+                    {
+                        IF (nPendingMoveGeneration = nGameGeneration)
+                        {
+                            game.MakeCpuMove();
+                            Cpu_Thinking_Fb = 0;
+                            RefreshUI();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+FUNCTION StartGame(INTEGER cpuEnabled, INTEGER cpuIsWhite)
+{
+    nGameGeneration = nGameGeneration + 1;
+    Cpu_Thinking_Fb = 0;
+    nSelectedSquare = 0;
+    sLegalMaskGlobal = "";
+    Promotion_Prompt_Fb = 0;
+    bCpuEnabled = cpuEnabled;
+    bCpuIsWhite = cpuIsWhite;
+    game.NewGame();
+    RefreshUI();
+    MaybeCpuMove();
+}
+
+FUNCTION CompletePromotion()
+{
+    STRING fromAlg[4];
+    STRING toAlg[4];
+    fromAlg = IndexToAlgebraic(nPendingFromIndex);
+    toAlg = IndexToAlgebraic(nPendingToIndex);
+    IF (game.MakeMove(fromAlg, toAlg, sPendingPromoLetter) = 0)
+    {
+        Reject_Reason$ = game.GetRejectReason();
+        Move_Rejected_Fb = 1;
+        Move_Rejected_Fb = 0;
+    }
+    Promotion_Prompt_Fb = 0;
+    nPendingFromIndex = 0;
+    nPendingToIndex = 0;
+    RefreshUI();
+    MaybeCpuMove();
+}
+
+FUNCTION HandleSquarePress(INTEGER idx)
+{
+    STRING fromAlg[4];
+    STRING toAlg[4];
+    STRING legalMask[65];
+    STRING boardSquares[65];
+    IF (Promotion_Prompt_Fb = 1) RETURN;
+    IF (nSelectedSquare = 0)
+    {
+        fromAlg = IndexToAlgebraic(idx);
+        legalMask = game.GetLegalDestinationMask(fromAlg);
+        IF (FIND("1", legalMask, 1) > 0)
+        {
+            nSelectedSquare = idx;
+            sLegalMaskGlobal = legalMask;
+            RefreshUI();
+        }
+    }
+    ELSE IF (idx = nSelectedSquare)
+    {
+        nSelectedSquare = 0;
+        sLegalMaskGlobal = "";
+        RefreshUI();
+    }
+    ELSE
+    {
+        fromAlg = IndexToAlgebraic(nSelectedSquare);
+        toAlg = IndexToAlgebraic(idx);
+        boardSquares = game.GetBoardSquares();
+        IF (IsPromotionMove(nSelectedSquare, idx, boardSquares) = 1)
+        {
+            nPendingFromIndex = nSelectedSquare;
+            nPendingToIndex = idx;
+            Promotion_Prompt_Fb = 1;
+        }
+        ELSE
+        {
+            IF (game.MakeMove(fromAlg, toAlg, "") = 0)
+            {
+                Reject_Reason$ = game.GetRejectReason();
+                Move_Rejected_Fb = 1;
+                Move_Rejected_Fb = 0;
+            }
+        }
+        nSelectedSquare = 0;
+        sLegalMaskGlobal = "";
+        RefreshUI();
+
+        IF (Promotion_Prompt_Fb = 0)
+        {
+            MaybeCpuMove();
+        }
+    }
+}
+
+PUSH Start_Two_Player       { StartGame(0, 0); }
+PUSH Start_One_Player_White { StartGame(1, 0); }
+PUSH Start_One_Player_Black { StartGame(1, 1); }
+
+PUSH Resign_White { game.Resign(1); RefreshUI(); }
+PUSH Resign_Black { game.Resign(0); RefreshUI(); }
+
+PUSH Square_Press
+{
+    INTEGER idx;
+    idx = GetLastModifiedArrayIndex();
+    HandleSquarePress(idx);
+}
+
+PUSH Promo_Choose_Queen  { sPendingPromoLetter = "Q"; CompletePromotion(); }
+PUSH Promo_Choose_Rook   { sPendingPromoLetter = "R"; CompletePromotion(); }
+PUSH Promo_Choose_Bishop { sPendingPromoLetter = "B"; CompletePromotion(); }
+PUSH Promo_Choose_Knight { sPendingPromoLetter = "N"; CompletePromotion(); }
+
+PUSH Promo_Cancel
+{
+    Promotion_Prompt_Fb = 0;
+    nPendingFromIndex = 0;
+    nPendingToIndex = 0;
+}
