@@ -79,20 +79,21 @@ STRING_FUNCTION PieceCodeToLabel(STRING code)
 
 STRING_FUNCTION PieceCodeToIconPath(STRING code)
 {
-    IF (code = "P") RETURN ("http://10.96.10.150:8000/wP.png");
-    IF (code = "N") RETURN ("http://10.96.10.150:8000/wN.png");
-    IF (code = "B") RETURN ("http://10.96.10.150:8000/wB.png");
-    IF (code = "R") RETURN ("http://10.96.10.150:8000/wR.png");
-    IF (code = "Q") RETURN ("http://10.96.10.150:8000/wQ.png");
-    IF (code = "K") RETURN ("http://10.96.10.150:8000/wK.png");
-    IF (code = "p") RETURN ("http://10.96.10.150:8000/bP.png");
-    IF (code = "n") RETURN ("http://10.96.10.150:8000/bN.png");
-    IF (code = "b") RETURN ("http://10.96.10.150:8000/bB.png");
-    IF (code = "r") RETURN ("http://10.96.10.150:8000/bR.png");
-    IF (code = "q") RETURN ("http://10.96.10.150:8000/bQ.png");
-    IF (code = "k") RETURN ("http://10.96.10.150:8000/bK.png");
-    RETURN ("http://10.96.10.150:8000/blank.png");
+    IF (code = "P") RETURN ("https://raw.githubusercontent.com/JJ0609/CrestronChess/ddb1ae91433b0497b33732fed2264e159f4a2d73/wP.png");
+    IF (code = "N") RETURN ("https://raw.githubusercontent.com/JJ0609/CrestronChess/ddb1ae91433b0497b33732fed2264e159f4a2d73/wN.png");
+    IF (code = "B") RETURN ("https://raw.githubusercontent.com/JJ0609/CrestronChess/ddb1ae91433b0497b33732fed2264e159f4a2d73/wB.png");
+    IF (code = "R") RETURN ("https://raw.githubusercontent.com/JJ0609/CrestronChess/ddb1ae91433b0497b33732fed2264e159f4a2d73/wR.png");
+    IF (code = "Q") RETURN ("https://raw.githubusercontent.com/JJ0609/CrestronChess/ddb1ae91433b0497b33732fed2264e159f4a2d73/wQ.png");
+    IF (code = "K") RETURN ("https://raw.githubusercontent.com/JJ0609/CrestronChess/ddb1ae91433b0497b33732fed2264e159f4a2d73/wK.png");
+    IF (code = "p") RETURN ("https://raw.githubusercontent.com/JJ0609/CrestronChess/ddb1ae91433b0497b33732fed2264e159f4a2d73/bP.png");
+    IF (code = "n") RETURN ("https://raw.githubusercontent.com/JJ0609/CrestronChess/ddb1ae91433b0497b33732fed2264e159f4a2d73/bN.png");
+    IF (code = "b") RETURN ("https://raw.githubusercontent.com/JJ0609/CrestronChess/ddb1ae91433b0497b33732fed2264e159f4a2d73/bB.png");
+    IF (code = "r") RETURN ("https://raw.githubusercontent.com/JJ0609/CrestronChess/ddb1ae91433b0497b33732fed2264e159f4a2d73/bR.png");
+    IF (code = "q") RETURN ("https://raw.githubusercontent.com/JJ0609/CrestronChess/ddb1ae91433b0497b33732fed2264e159f4a2d73/bQ.png");
+    IF (code = "k") RETURN ("https://raw.githubusercontent.com/JJ0609/CrestronChess/ddb1ae91433b0497b33732fed2264e159f4a2d73/bK.png");
+    RETURN ("https://raw.githubusercontent.com/JJ0609/CrestronChess/ddb1ae91433b0497b33732fed2264e159f4a2d73/blank.png");
 }
+
 
 
 INTEGER_FUNCTION IsPromotionMove(INTEGER fromIdx, INTEGER toIdx, STRING boardSquares)
